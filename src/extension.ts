@@ -21,7 +21,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	let activeEditor = vscode.window.activeTextEditor;
 	const sym_block: vscode.DecorationOptions[] = [];
-
+	
 	enum symName {
 		if		='#if ',
 		elif	='#elif ',
@@ -46,7 +46,7 @@ export function activate(context: vscode.ExtensionContext) {
 		return '';
 	}
 
-	function GetInactiveType(if_line_txt: string): number {
+	function GetInactiveType(if_line_txt: string): [number, string] {
 		console.log('check symbol : ' + if_line_txt);
 		var keys = if_line_txt.split(/[\s\t]+/); 
 		let regEx = /[_a-zA-Z][0-9a-zA-Z_]+/g;
@@ -76,6 +76,7 @@ export function activate(context: vscode.ExtensionContext) {
 		let predef_symbols: {symbol:string, val:number }[] = predef_set.get('if-conditioner.symbols', []);
 		let code_tmp = code;
 		let checked_symbol = false;
+		let symbol_name = "";
 
 		while ((match = regEx.exec(code_tmp)) != null){
 			//console.log('match:'+ match[0])
@@ -84,6 +85,7 @@ export function activate(context: vscode.ExtensionContext) {
 			if(result !== undefined){
 				code = code.replace(tmp_key, result.val.toString());
 				checked_symbol = true;
+				symbol_name = result.symbol;
 			}
 			else {
 				code = code.replace(tmp_key, '1');
@@ -98,16 +100,16 @@ export function activate(context: vscode.ExtensionContext) {
 			console.log('is active : ' + isActiv);
 	
 			if(isActiv) {
-				return 1;
+				return [1, symbol_name];
 			} else {
-				return 0;
+				return [0, symbol_name];
 			}
 		}
 
-		return -1;
+		return [-1, symbol_name];
 	}
 
-	function addInactiveBlock(curr_line:number, start_line:number): number {
+	function addInactiveBlock(curr_line:number, start_line:number, symbol: string): number {
 		if (!activeEditor) {
 			return start_line;
 		}
@@ -116,7 +118,7 @@ export function activate(context: vscode.ExtensionContext) {
 			const prev_line_str = activeEditor.document.lineAt(curr_line-1).text;
 			let start_pos = new vscode.Position(start_line + 1, 0);
 			let end_pos = new vscode.Position(curr_line-1, prev_line_str.length);
-			const decoration = { range: new vscode.Range(start_pos, end_pos), hoverMessage: 'Inactivated by' };
+			const decoration = { range: new vscode.Range(start_pos, end_pos), hoverMessage: 'Inactivated by "' + symbol + '"' };
 			sym_block.push(decoration);
 		}
 
@@ -132,6 +134,7 @@ export function activate(context: vscode.ExtensionContext) {
 		let block_start_line = -1;
 		let if_block_started = false;
 		let cur_if_st = -1;
+		let symbol = "";
 		
 		for (; i < activeEditor.document.lineCount; i++) {
 			const line_str = activeEditor.document.lineAt(i);
@@ -144,10 +147,10 @@ export function activate(context: vscode.ExtensionContext) {
 				switch(sym_kind){
 					case symName.elif:{
 						if(cur_if_st == 0){
-							block_start_line = addInactiveBlock(i, block_start_line);
+							block_start_line = addInactiveBlock(i, block_start_line, symbol);
 						}
 						else if(cur_if_st == -1){
-							cur_if_st = GetInactiveType(line_txt);
+							[ cur_if_st, symbol ] = GetInactiveType(line_txt);
 							if( cur_if_st == 0) {
 								block_start_line = i;
 							}
@@ -161,7 +164,7 @@ export function activate(context: vscode.ExtensionContext) {
 						if(if_block_started == false){
 							if_block_started = true;
 							
-							cur_if_st = GetInactiveType(line_txt);
+							[ cur_if_st, symbol ] = GetInactiveType(line_txt);
 							if( cur_if_st == 0) {
 								block_start_line = i;
 							}
@@ -173,7 +176,7 @@ export function activate(context: vscode.ExtensionContext) {
 					}
 					case symName.else:{
 						if(cur_if_st == 0){
-							block_start_line = addInactiveBlock(i, block_start_line);
+							block_start_line = addInactiveBlock(i, block_start_line, symbol);
 						}
 						else if(cur_if_st == 1){
 							block_start_line = i;
@@ -181,7 +184,7 @@ export function activate(context: vscode.ExtensionContext) {
 						break;
 					}
 					case symName.endif:{
-						block_start_line = addInactiveBlock(i, block_start_line);
+						block_start_line = addInactiveBlock(i, block_start_line, symbol);
 						if(exit_with_endif == true){
 							return i;
 						}
